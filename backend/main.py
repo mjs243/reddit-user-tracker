@@ -3,8 +3,11 @@ import requests
 import sqlite3
 import os
 from urllib.parse import urlencode
+from backend.database import init_db
 
 app = FastAPI()
+
+init_db()
 
 # Reddit OAuth Credentials
 CLIENT_ID = "1Jfn8k53QIE6afiBbcNQqA"
@@ -90,3 +93,31 @@ def auth_callback(code: str, state: str):
         conn.commit()
 
     return {"message": "Login successful!", "user": reddit_username}
+
+# Step 3: Track Users
+@app.post("/track/{username}")
+def track_user(username: str, request: Request):
+    user = request.headers.get("X-Reddit-Username")
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR IGNORE INTO tracked_users (owner, reddit_username) VALUES (?, ?)", (user, username))
+        conn.commit()
+
+    return {"message": f"Now tracking {username}"}
+
+# Step 4: Delete Tracked Users
+@app.delete("/untrack/{username}")
+def untrack_user(username: str, request: Request):
+    user = request.headers.get("X-Reddit-Username")
+    if not user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM tracked_users WHERE owner=? AND reddit_username=?", (user, username))
+        conn.commit()
+
+    return {"message": f"Stopped tracking {username}"}
